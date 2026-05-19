@@ -1,15 +1,6 @@
-""" Stop Service Type Configuration
- Source: MTA NYC Subway Map + GTFS static files
- 
- Service Types:
- - full_time: Train always stops here
- - part_time: Train does not always stop here (Limited daytime/evening)
- - rush_hour_only: Peak hours only (7-9 AM, 5-7 PM) in peak direction
- - night_service: Only during late-night service (12 AM - 6 AM)"""
-
 STOP_SERVICE_TYPES = {
-    # Format: (route_id, stop_id) -> service_type
-    # Only stops with special service (NON full-time)
+    # Formato: (route_id, stop_id) -> service_type
+    
 
     # NIGHT SERVICE
     ('2', '121N'): 'night_service',  # 86 St
