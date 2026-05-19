@@ -8,7 +8,7 @@ Requisitos previos
 - Python 3.9 o superior
 - PostgreSQL instalado y en ejecución
 - Librerías Python:
-    pip install -r ../ejecutable/requirements.txt
+    pip install -r ../requirements.txt
     pip install psycopg2-binary google-transit pytz
 
 
