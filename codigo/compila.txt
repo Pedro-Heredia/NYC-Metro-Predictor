@@ -1,0 +1,76 @@
+Proceso de replicación - NYC Metro Predictor
+
+Este directorio contiene las fuentes necesarias para replicar el pipeline
+completo: recolección de datos, procesado y entrenamiento del modelo.
+
+Requisitos previos
+
+- Python 3.9 o superior
+- PostgreSQL instalado y en ejecución
+- Librerías Python:
+    pip install -r ../requirements.txt
+    pip install psycopg2-binary google-transit pytz
+
+
+Paso 1 - Crear la base de datos en PostgreSQL
+
+Crear una base de datos PostgreSQL con el nombre y credenciales que se
+prefiera. En el proyecto original se usó:
+
+    nombre de base de datos: delays2
+    usuario:                 postgres
+    contraseña:              tfg
+
+Una vez creada, actualizar el diccionario DB_CONFIG que aparece al
+principio de collector.py y de prepare_dataset.py con los valores elegidos.
+La tabla "delays" se crea automáticamente al arrancar el recolector
+por primera vez.
+
+Las credenciales están escritas directamente en el código porque la base
+de datos es local (localhost) y no es accesible desde fuera de la máquina,
+por lo que no supone un riesgo de seguridad en este contexto. Si se
+publicara el código en un repositorio público como GitHub, lo correcto
+sería moverlas a un archivo .env excluido del repositorio.
+
+    createdb -U postgres delays2
+
+
+Paso 2 - Recolección de datos (collector.py)
+
+Recopila datos en tiempo real de la API GTFS-RT de la MTA. Los endpoints
+son públicos y no requieren clave de API. Requiere los archivos GTFS
+estáticos presentes en este directorio (stops.txt, stop_times.txt,
+trips.txt, calendar.txt, calendar_dates.txt).
+
+En el proyecto original el recolector estuvo funcionando aproximadamente
+8 semanas (desde finales de octubre de 2025 hasta finales de diciembre),
+acumulando unos 22.000 segmentos de viaje.
+
+    python collector.py
+
+El script se ejecuta de forma continua guardando registros en PostgreSQL.
+
+
+Paso 3 - Preparación del dataset (prepare_dataset.py)
+
+Lee los datos de PostgreSQL, construye los segmentos de viaje y aplica
+la ingeniería de features. Genera el archivo dataset_viajes_raw.pkl.
+
+    python prepare_dataset.py
+
+El archivo resultante se copia en el directorio "ejecutable" antes de entrenar.
+
+
+Paso 4 - Entrenamiento del modelo (train_xgboost.py)
+
+Lee dataset_viajes_raw.pkl y entrena el modelo XGBoost final.
+Genera el archivo modelo_xgboost_final.pkl.
+
+    python train_xgboost.py
+
+El archivo resultante se copia en el directorio "ejecutable" antes de
+lanzar la aplicación.
+
+Nota: el directorio "ejecutable" ya incluye el dataset y el modelo
+preentrenados, así que es posible lanzar la aplicación directamente
+sin ejecutar los pasos anteriores.

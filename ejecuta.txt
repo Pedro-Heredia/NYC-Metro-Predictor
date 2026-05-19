@@ -1,0 +1,38 @@
+Instrucciones de ejecución - NYC Metro Predictor
+
+Este directorio contiene todo lo necesario para lanzar la aplicación
+directamente, sin necesidad de recolectar datos ni reentrenar el modelo.
+
+Requisitos previos:
+
+- Python 3.9 o superior
+- Conexión a Internet (la aplicación carga mapas de Google Maps)
+
+
+Paso 1 - Instalar dependencias
+
+    pip install -r requirements.txt
+
+
+Paso 2 - Lanzar la aplicación
+
+    python -m streamlit run app.py
+
+Se abrirá automáticamente en el navegador en http://localhost:8501
+
+
+Archivos incluidos
+
+- app.py                     interfaz web Streamlit
+- predictor.py               motor de predicción XGBoost + enrutamiento Dijkstra
+- service_types.py           tipos de servicio por parada y línea
+- modelo_xgboost_final.pkl   modelo XGBoost entrenado
+- dataset_viajes_raw.pkl     dataset de ~22.000 segmentos de viaje
+- stops.txt                  GTFS: paradas
+- stop_times.txt             GTFS: horarios
+- trips.txt                  GTFS: viajes
+- routes.txt                 GTFS: líneas (colores del mapa)
+
+
+La aplicación también está desplegada en Streamlit Cloud:
+https://damptzhv4dxdncxqbur2qb.streamlit.app/
