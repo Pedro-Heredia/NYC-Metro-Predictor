@@ -23,8 +23,16 @@ except Exception:
 #python -m streamlit run app.py
 
 st.set_page_config(page_title="NYC Metro Predictor", page_icon="🚇", layout="wide")
-st.markdown('<style>.titulo{color:#0066CC;font-size:2.5rem;font-weight:bold;text-align:center}</style>',
-            unsafe_allow_html=True)
+st.markdown("""
+<style>
+div.st-key-header_titulo button{
+    background:none;border:none;color:#0066CC;font-size:2.5rem;font-weight:bold;
+    width:100%;text-align:center;padding:0;margin:0 0 1rem 0;cursor:pointer;
+}
+div.st-key-header_titulo button:hover{color:#0055aa;text-decoration:underline}
+div.st-key-header_titulo button:focus{box-shadow:none}
+</style>
+""", unsafe_allow_html=True)
 
 _hora_navegador = st_javascript("new Date().toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit', hour12: false})")
 if _hora_navegador and isinstance(_hora_navegador, str) and ':' in _hora_navegador:
@@ -225,6 +233,7 @@ def diagnosticar_sin_ruta(destino_nombre, linea_destino, hora_h, dow):
 # FUNCIONES DE MAPA
 # ============================================================================
 
+@st.cache_data
 def crear_mapa_general(lineas_activas, mostrar_hm=False, hora_hm=0, dow_hm=0):
     segmentos, nodos, colores = construir_datos_mapa()
     m = folium.Map(location=[40.758, -73.9855], zoom_start=12,
@@ -334,7 +343,10 @@ for key, val in defaults.items():
 # ============================================================================
 # INTERFAZ PRINCIPAL
 # ============================================================================
-st.markdown('<div class="titulo"> NYC Metro Predictor</div><br>', unsafe_allow_html=True)
+with st.container(key="header_titulo"):
+    if st.button("🚇 NYC Metro Predictor", key="btn_titulo_home"):
+        st.session_state.opciones_ruta = None
+        st.rerun()
 paradas_por_linea = obtener_paradas_por_linea()
 LINEAS_OPCIONES = ['Todas'] + sorted(p10.LINEAS_VALIDAS)
 DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
@@ -474,7 +486,7 @@ if st.session_state.opciones_ruta is not None:
             st.session_state.opciones_ruta = None; st.rerun()
 
     else:
-        col_res, col_map = st.columns([6, 4])
+        col_res, col_map = st.columns([5.68, 4.32])  # mapa +8%, resultados ajustado en consecuencia
         with col_res:
             st.subheader(" Itinerarios Encontrados")
             html_output = """<style>
@@ -579,12 +591,12 @@ else:
     col_ctrl, col_mapa = st.columns([1, 4])
     with col_ctrl:
         st.markdown("**Filtrar líneas:**")
-        lineas_activas = set()
-        for lid in sorted(p10.LINEAS_VALIDAS):
-            if st.checkbox(f"Línea {lid}", value=True, key=f"ck_{lid}"):
-                lineas_activas.add(lid)
-        if not lineas_activas:
-            lineas_activas = set(p10.LINEAS_VALIDAS)
+        lineas_ordenadas = sorted(p10.LINEAS_VALIDAS)
+        seleccion = st.multiselect(
+            "Líneas a mostrar en el mapa", lineas_ordenadas, default=lineas_ordenadas,
+            key="ml_lineas", label_visibility="collapsed"
+        )
+        lineas_activas = frozenset(seleccion) if seleccion else frozenset(p10.LINEAS_VALIDAS)
         st.markdown("---")
         mostrar_hm = st.checkbox("Retrasos actuales", value=False)
 
@@ -607,7 +619,22 @@ else:
                 "</div>",
                 unsafe_allow_html=True
             )
-        
+
+st.markdown("---")
+with st.expander("ℹ️ Sobre el modelo"):
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("MAE (test)", f"{p10.mae_test:.2f} min" if p10.mae_test is not None else "—")
+    c2.metric("R² (test)", f"{p10.r2_test*100:.1f}%" if p10.r2_test is not None else "—")
+    c3.metric("RMSE (test)", f"{p10.rmse_test:.2f} min" if p10.rmse_test is not None else "—")
+    c4.metric("MAPE (test)", f"{p10.mape_test:.1f}%" if p10.mape_test is not None else "—")
+    detalles = []
+    if p10.train_date:
+        detalles.append(f"**Último reentrenamiento:** {p10.train_date}")
+    if p10.n_samples_train:
+        detalles.append(f"**Muestras de entrenamiento:** {p10.n_samples_train:,}")
+    if detalles:
+        st.caption(" · ".join(detalles))
+
 #https://python-visualization.github.io/folium/latest/user_guide/map.html
 #https://folium.streamlit.app/
 #https://python-visualization.github.io/folium/latest/user_guide/plugins/heatmap.html

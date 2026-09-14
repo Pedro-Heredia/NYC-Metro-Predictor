@@ -29,7 +29,13 @@ try:
     encoders = modelo_data['encoders']
     features = modelo_data['features']
     mae_test = modelo_data['mae_test']
-    
+    rmse_test = modelo_data.get('rmse_test', None)
+    r2_test = modelo_data.get('r2_test', None)
+    mape_test = modelo_data.get('mape_test', None)
+    train_date = modelo_data.get('train_date', None)
+    n_samples_train = modelo_data.get('n_samples_train', None)
+    n_samples_test = modelo_data.get('n_samples_test', None)
+
     print(f"MAE del modelo: {mae_test:.3f} min")
     
 except FileNotFoundError:
