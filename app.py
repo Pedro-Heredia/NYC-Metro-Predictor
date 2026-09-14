@@ -87,10 +87,13 @@ def construir_datos_mapa():
 
 
 @st.cache_data
-def construir_datos_heatmap():
+def construir_datos_heatmap(lineas_activas=None):
     try:
         df = p10.viajes_df.copy()
         if 'destination_stop_id' not in df.columns: return None
+        if lineas_activas and 'route_id' in df.columns:
+            df = df[df['route_id'].astype(str).isin(lineas_activas)]
+            if df.empty: return None
         df['stop_base'] = df['destination_stop_id'].astype(str).apply(p10.limpiar_stop_id)
         agrupado = df.groupby(['stop_base','hour','day_of_week'])['delay_at_destination'].mean().reset_index()
         agrupado.columns = ['stop_base','hour','dow','mean_delay']
@@ -253,7 +256,7 @@ def crear_mapa_general(lineas_activas, mostrar_hm=False, hora_hm=0, dow_hm=0):
             tooltip=f"{info['name']} (lineas: {', '.join(sorted(visibles))})"
         ).add_to(m)
     if mostrar_hm:
-        hm_data = construir_datos_heatmap()
+        hm_data = construir_datos_heatmap(lineas_activas)
         if hm_data is not None:
             filtrado = hm_data[
                 (hm_data['dow'] == dow_hm) &
@@ -592,9 +595,9 @@ else:
     with col_ctrl:
         st.markdown("**Filtrar líneas:**")
         lineas_ordenadas = sorted(p10.LINEAS_VALIDAS)
-        seleccion = st.multiselect(
+        seleccion = st.pills(
             "Líneas a mostrar en el mapa", lineas_ordenadas, default=lineas_ordenadas,
-            key="ml_lineas", label_visibility="collapsed"
+            selection_mode="multi", key="pills_lineas", label_visibility="collapsed"
         )
         lineas_activas = frozenset(seleccion) if seleccion else frozenset(p10.LINEAS_VALIDAS)
         st.markdown("---")
