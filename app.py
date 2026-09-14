@@ -153,7 +153,8 @@ def t(key, **kwargs):
 st.set_page_config(page_title="NYC Metro Predictor", page_icon="🚇", layout="wide")
 st.markdown("""
 <style>
-div.block-container{padding-top:0rem !important}
+div.block-container{padding-top:0rem !important;margin-top:-2rem !important}
+div.st-key-hora_navegador_wrap{margin-bottom:-1rem !important}
 /* Titulo-boton: centrar a base de flex en cada nivel posible del wrapper,
    en vez de solo en el propio <button>, porque text-align no reposiciona
    el elemento dentro de su padre, solo el texto dentro de si mismo. */
