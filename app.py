@@ -153,10 +153,16 @@ def t(key, **kwargs):
 st.set_page_config(page_title="NYC Metro Predictor", page_icon="🚇", layout="wide")
 st.markdown("""
 <style>
-div.st-key-header_titulo{width:100% !important}
+/* Titulo-boton: centrar a base de flex en cada nivel posible del wrapper,
+   en vez de solo en el propio <button>, porque text-align no reposiciona
+   el elemento dentro de su padre, solo el texto dentro de si mismo. */
+div.st-key-header_titulo,
+div.st-key-header_titulo > div,
+div.st-key-header_titulo [data-testid="stButton"]{
+    width:100% !important;display:flex !important;justify-content:center !important;
+}
 div.st-key-header_titulo button{
-    background:none !important;border:none !important;width:100% !important;
-    text-align:center !important;justify-content:center !important;
+    background:none !important;border:none !important;
     padding:0 !important;margin:0 0 1rem 0 !important;cursor:pointer !important;
 }
 div.st-key-header_titulo button p,
@@ -165,13 +171,19 @@ div.st-key-header_titulo button div{
 }
 div.st-key-header_titulo button:hover p{color:#0055aa !important;text-decoration:underline !important}
 div.st-key-header_titulo button:focus{box-shadow:none !important;outline:none !important}
+
+/* Ocultar la caja del componente st_javascript (solo se usa para leer la
+   hora del navegador, no deberia verse) sin afectar a otros iframes (mapa) */
+div.st-key-hora_navegador_wrap{height:0 !important;overflow:hidden !important;margin:0 !important}
+div.st-key-hora_navegador_wrap iframe{height:0 !important;border:none !important}
 </style>
 """, unsafe_allow_html=True)
 
 if 'lang' not in st.session_state:
     st.session_state.lang = 'en'
 
-_hora_navegador = st_javascript("new Date().toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit', hour12: false})")
+with st.container(key="hora_navegador_wrap"):
+    _hora_navegador = st_javascript("new Date().toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit', hour12: false})")
 if _hora_navegador and isinstance(_hora_navegador, str) and ':' in _hora_navegador:
     ahora = datetime.now().replace(hour=int(_hora_navegador.split(':')[0]), minute=int(_hora_navegador.split(':')[1]))
 else:
