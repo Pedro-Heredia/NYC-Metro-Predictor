@@ -4,6 +4,8 @@ Aplicación web para predecir retrasos en el metro de Nueva York y calcular ruta
 
 Desarrollada como Trabajo de Fin de Grado en Ingeniería Informática.
 
+Link: https://damptzhv4dxdncxqbur2qb.streamlit.app/
+
 ## Tecnologías
 - **Modelo:** XGBoost entrenado con datos históricos de la MTA
 - **Enrutamiento:** Dijkstra sobre grafo GTFS
