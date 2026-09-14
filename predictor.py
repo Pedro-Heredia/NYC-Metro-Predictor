@@ -6,7 +6,7 @@ import networkx as nx
 from datetime import datetime, timedelta
 from pathlib import Path
 import warnings
-from service_types import should_train_stop_here, STOP_SERVICE_TYPES, FULL_TIME_ONLY_ROUTES
+from service_types import should_train_stop_here, STOP_SERVICE_TYPES, FULL_TIME_ONLY_ROUTES, get_stop_service_type
 import math
 warnings.filterwarnings('ignore')
 
@@ -17,7 +17,7 @@ warnings.filterwarnings('ignore')
 GTFS_DIR = Path(".")
 OVERHEAD_ESTACION = 2.0
 TIEMPO_TRANSBORDO = 3.0
-LINEAS_VALIDAS = {'1', '2', '3', '4', '5', '6', '7', 'G', 'L'}
+LINEAS_VALIDAS = {'1', '2', '3', '4', '5', '6', '7', 'A', 'C', 'E', 'B', 'D', 'F', 'M', 'J', 'Z', 'N', 'Q', 'R', 'W', 'G', 'L'}
 
 
 try:
@@ -25,7 +25,7 @@ try:
         modelo_data = pickle.load(f)
     
     model = modelo_data['model']
-    scaler = modelo_data['scaler']
+    scaler = modelo_data.get('scaler', None)
     encoders = modelo_data['encoders']
     features = modelo_data['features']
     mae_test = modelo_data['mae_test']
@@ -142,7 +142,7 @@ def trips_validos_para_hora(trips_candidatos, hour, dow):
     es_nocturno  = (hour < 6 or hour >= 22)
     es_laborable = (dow < 5)
     es_rush      = es_laborable and ((6.5 <= hour < 9.5) or (15.5 <= hour < 20.0))
-    es_part_time = (hour >= 6)  # part_time: disponible desde las 6h hasta medianoche (hour 0-5 es nocturno exclusivo)
+    es_part_time = (6 <= hour < 23)  # part_time: disponible de 6h a 23h
    #part-time: el tren parara en esa estacion siempre que no sea de noche
     validos = []
     for t in trips_candidatos:
@@ -312,12 +312,19 @@ def seleccionar_grafo(hour, dow):
 
 
 
-def preparar_features_segmento(origen_id, destino_id, route_id, tiempo_total_min, dow, 
-                                travel_time, segment_num, total_segments):
-    # Extraer componentes de tiempo 
+def preparar_features_segmento(origen_id, destino_id, route_id, tiempo_total_min, dow,
+                                travel_time, segment_num, total_segments,
+                                delay_actual=None, cumulative_delay=None, fecha=None, direction_north=0):
     hour = int((tiempo_total_min // 60) % 24)
     minute_of_hour = int(tiempo_total_min % 60)
     minute_of_day = int(tiempo_total_min % 1440)
+
+    fecha_ref = fecha if fecha is not None else datetime.now()
+    month = fecha_ref.month
+    is_weekend = 1 if dow >= 5 else 0
+
+    orig_stype = get_stop_service_type(route_id, origen_id)
+    dest_stype = get_stop_service_type(route_id, destino_id)
 
     viaje_data = {
         'origin_stop_id': origen_id,
@@ -329,89 +336,102 @@ def preparar_features_segmento(origen_id, destino_id, route_id, tiempo_total_min
         'segment_number': segment_num,
         'total_segments': total_segments,
         'minute_of_hour': minute_of_hour,
-        'minute_of_day': minute_of_day
+        'minute_of_day': minute_of_day,
+        'origin_is_part_time': 1 if orig_stype == 'part_time' else 0,
+        'dest_is_part_time': 1 if dest_stype == 'part_time' else 0,
+        'origin_is_rush_hour': 1 if orig_stype == 'rush_hour_only' else 0,
+        'dest_is_rush_hour': 1 if dest_stype == 'rush_hour_only' else 0,
+        'delay_at_origin': delay_actual if delay_actual is not None else np.nan,
+        'cumulative_delay_origin': cumulative_delay if cumulative_delay is not None else np.nan,
+        'month': month,
+        'is_weekend': is_weekend,
+        'direction_north': direction_north
     }
-    
+
     df = pd.DataFrame([viaje_data])
-    
-    # Feature Engineering (feaqtures) (mismo que el del entrenamiento)
+
     df['position_ratio'] = df['segment_number'] / df['total_segments']
     df['is_early_segment'] = (df['position_ratio'] < 0.33).astype(int)
     df['is_late_segment'] = (df['position_ratio'] > 0.67).astype(int)
-    
-    
+
     df['is_morning_rush'] = ((df['hour'] >= 7) & (df['hour'] <= 9)).astype(int)
-    df['is_lunch_rush'] = ((df['hour'] >= 13) & (df['hour'] <= 15)).astype(int)
     df['is_evening_rush'] = ((df['hour'] >= 17) & (df['hour'] <= 19)).astype(int)
     df['is_night'] = ((df['hour'] >= 22) | (df['hour'] < 6)).astype(int)
-    
-    
+
     df['is_line_3'] = (df['route_id'] == '3').astype(int)
     df['is_line_5'] = (df['route_id'] == '5').astype(int)
     df['is_express'] = df['route_id'].isin(['3', '5', '7']).astype(int)
-    
-    # Interacciones
+
     df['hour_x_position'] = df['hour'] * df['position_ratio']
     df['rush_x_segment'] = (df['is_morning_rush'] + df['is_evening_rush']) * df['segment_number']
-    
-    # Encoding de paradas y rutas
+
     for col in ['origin_stop_id', 'destination_stop_id', 'route_id']:
         if col in encoders:
             try:
-                df[f'{col}_encoded'] = encoders[col].transform(df[col])  #route_id = '1' o origin_stop_id = '120' | '1' ->  0
+                df[f'{col}_encoded'] = encoders[col].transform(df[col])
             except:
-                df[f'{col}_encoded'] = 0 #si hay una parada que nunca vio durante el entrenamiento, asignamos 0 en ve de dar fallo
-    
-    # Asegurar orden de columnas exacto al entrenamiento
+                df[f'{col}_encoded'] = 0
+
     X = df[features].values
-    X_scaled = scaler.transform(X)
-
-    #El modelo tiene features con rangos muy distintos: hour va de 0 a 23, travel_time_minutes puede ir de 1 a 15, minute_of_day va de 0 a 1440.
-    # Si una variable tiene valores 100 veces mas grandes que otra, el modelo puede darle mas peso solo por eso, no porque sea mas importantr
-    #El scaler aprendio durante el entrenamiento la media y desviacion tipica de cada columna, y las convierte todas a la misma escala (media 0, desviacion 1)
-    return X_scaled
+    return scaler.transform(X) if scaler is not None else X
 
 
 
-def predecir_ruta_completa(ruta_stops, hora_salida_min, dow, grafo=None):
-    # ruta_stops es simplemente una lista de strings ['120', '121', '122'...]
+def predecir_ruta_completa(ruta_stops, hora_salida_min, dow, grafo=None, delay_actual=None):
     if grafo is None:
-        grafo = G_METRO_DIA  # (defecto por si no se pasa grafo)
+        grafo = G_METRO_DIA
 
     hora_actual = hora_salida_min
     delay_total = 0
     prog_total = 0
-    
-    r_id_tramo = "1"  # (defecto por si no se pasa linea)
+
+    r_id_tramo = "1"
     try:
-        r_id_tramo = grafo.get_edge_data(ruta_stops[0], ruta_stops[1])['linea'] #sacar linea de la primera arista
+        r_id_tramo = grafo.get_edge_data(ruta_stops[0], ruta_stops[1])['linea']
     except:
         pass
+
+    # Modo tiempo real: delay_actual conocido, se propaga prediccion a prediccion.
+    # Modo pre-viaje: delay_actual=None -> NaN en todos los segmentos.
+    delay_en_origen = delay_actual
+    cumul_delay = delay_actual  # None si pre-viaje
+    fecha_actual = datetime.now()
 
     for i in range(len(ruta_stops) - 1):
         origen = ruta_stops[i]
         destino = ruta_stops[i+1]
-        
-        t_base = 2.0  
+
+        t_base = 2.0
         try:
-            t_base = grafo.get_edge_data(origen, destino)['weight'] #tiempo programado de parada a parada
+            t_base = grafo.get_edge_data(origen, destino)['weight']
         except:
             pass
-        
-        X = preparar_features_segmento(origen, destino, r_id_tramo, hora_actual, dow, t_base, i+1, len(ruta_stops) - 1) #1, 10
+
+        X = preparar_features_segmento(
+            origen, destino, r_id_tramo, hora_actual, dow,
+            t_base, i+1, len(ruta_stops) - 1,
+            delay_actual=delay_en_origen,
+            cumulative_delay=cumul_delay,
+            fecha=fecha_actual
+        )
         delay = model.predict(X)[0]
-        
-        real = max(0.5, t_base + delay) #minimo de 30 segundos (fsicamente no puede ser menos, para en caso de error)
+
+        real = max(0.5, t_base + delay)
         delay_real = real - t_base
-        
-        hora_actual += real #sumar al reloj interno el tiempo real de este segmento
-        delay_total += delay_real # acum de delay
-        prog_total += t_base #acum tiempo prog
-        
-    return { 
-        'hora_llegada_min': hora_actual, #hora de llegada estimada al final del tramo
-        'delay_total': delay_total, #delay total acum
-        'tiempo_prog': prog_total #tiempo programado total del tramo
+
+        hora_actual += real
+        delay_total += delay_real
+        prog_total += t_base
+
+        # En modo tiempo real propagamos el delay predicho al siguiente segmento.
+        if delay_actual is not None:
+            delay_en_origen = delay
+            cumul_delay = (cumul_delay or 0) + delay_real
+
+    return {
+        'hora_llegada_min': hora_actual,
+        'delay_total': delay_total,
+        'tiempo_prog': prog_total
     }, None
 
 #tiempo programado histrico, XGBoost para predecir el delay, y avanza el reloj
@@ -453,7 +473,7 @@ def buscar_trenes_en_gtfs_rapido(route_id, stop_id_origen, hora_deseada_min, can
     return trenes
 
 
-def calcular_opciones_dijkstra(origenes, destinos, hora_salida_prog, dow, es_llegada=False, hora_objetivo_real=None, linea_origen=None, linea_destino=None):
+def calcular_opciones_dijkstra(origenes, destinos, hora_salida_prog, dow, es_llegada=False, hora_objetivo_real=None, linea_origen=None, linea_destino=None, delay_actual=None):
 
 
     h_parts = hora_salida_prog.split(':')
@@ -661,12 +681,15 @@ def calcular_opciones_dijkstra(origenes, destinos, hora_salida_prog, dow, es_lle
                     hora_llegada_fisica + TIEMPO_TRANSBORDO
                 )
 
-            # Prediccion del tramo
+            # Prediccion del tramo.
+            # delay_actual solo se pasa en el primer tramo (tren origen conocido);
+            # los tramos de transbordo siempre en modo pre-viaje (tren desconocido).
             res, err = predecir_ruta_completa(
                 ruta_stops,
                 hora_actual,
                 dow,
-                grafo=grafo
+                grafo=grafo,
+                delay_actual=delay_actual if idx == 0 else None
             )
 
             if err:
@@ -851,7 +874,7 @@ def seleccionar_parada(nombre_input, tipo):
 
 def mostrar_opciones(opciones, modo='salida'):
     if not opciones:
-        print("\nNo se encontraron rutas posibles con las lineas disponibles (1-7, G, L).")
+        print("\nNo se encontraron rutas posibles entre las estaciones indicadas.")
         return
 
     for i, op in enumerate(opciones, 1):

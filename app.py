@@ -3,12 +3,18 @@ import pandas as pd
 import folium
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from streamlit_javascript import st_javascript
 import predictor as p10
 from service_types import (
     get_stop_service_type, should_train_stop_here, STOP_SERVICE_TYPES, FULL_TIME_ONLY_ROUTES
 )
+
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+    _NYC_TZ = _ZoneInfo('America/New_York')
+except Exception:
+    _NYC_TZ = None
 
 #https://python-visualization.github.io/folium/latest/user_guide/map.html
 #https://folium.streamlit.app/
@@ -24,7 +30,10 @@ _hora_navegador = st_javascript("new Date().toLocaleTimeString('es-ES', {hour: '
 if _hora_navegador and isinstance(_hora_navegador, str) and ':' in _hora_navegador:
     ahora = datetime.now().replace(hour=int(_hora_navegador.split(':')[0]), minute=int(_hora_navegador.split(':')[1]))
 else:
-    ahora = datetime.utcnow() + timedelta(hours=2)
+    if _NYC_TZ:
+        ahora = datetime.now(_NYC_TZ).replace(tzinfo=None)
+    else:
+        ahora = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=4)
 
 
 @st.cache_data
@@ -133,16 +142,16 @@ def buscar_estaciones_candidatas(texto, linea=None):
     return candidatos
 
 
-def diagnosticar_sin_ruta(destino_nombre, linea_destino, hora_h, dow):
+def diagnosticar_restriccion_parada(stop_nombre, linea, hora_h, dow):
     """
-    Devuelve (motivo_str, [lineas_alternativas]) si la parada tiene servicio especial
-    no activo a esta hora. Devuelve (None, []) si el problema es otro.
+    Comprueba si una parada tiene restricción de servicio no activa a esa hora.
+    Devuelve (motivo_str, [lineas_alternativas]) si hay restricción,
+    o (None, []) si no hay o no se puede determinar.
     """
-    if not linea_destino or linea_destino == 'Todas':
+    if not linea or linea == 'Todas':
         return None, []
 
-    # Buscar stop_ids que correspondan a destino_nombre en linea_destino
-    trips_linea = p10.trips_df[p10.trips_df['route_id'] == linea_destino]['trip_id'].unique()
+    trips_linea = p10.trips_df[p10.trips_df['route_id'] == linea]['trip_id'].unique()
     if len(trips_linea) == 0:
         return None, []
 
@@ -150,23 +159,21 @@ def diagnosticar_sin_ruta(destino_nombre, linea_destino, hora_h, dow):
         p10.stop_times_df['trip_id'].isin(trips_linea)
     ]['stop_id'].unique()
 
-    # Encontrar el stop_id base que tiene ese nombre
     base_encontrado = None
     for sid in stop_ids_raw:
         base = p10.limpiar_stop_id(sid)
         match = p10.stops_df[p10.stops_df['stop_id'] == base]
-        if not match.empty and match['stop_name'].iloc[0] == destino_nombre:
+        if not match.empty and match['stop_name'].iloc[0] == stop_nombre:
             base_encontrado = base
             break
 
     if base_encontrado is None:
         return None, []
 
-    # Comprobar tipo de servicio (probar variantes N, S y base)
     stype = 'full_time'
     sid_usado = base_encontrado
     for variant in [base_encontrado + 'N', base_encontrado + 'S', base_encontrado]:
-        t = get_stop_service_type(linea_destino, variant)
+        t = get_stop_service_type(linea, variant)
         if t != 'full_time':
             stype = t
             sid_usado = variant
@@ -175,23 +182,21 @@ def diagnosticar_sin_ruta(destino_nombre, linea_destino, hora_h, dow):
     if stype == 'full_time':
         return None, []
 
-    # Verificar si está activo a esta hora
-    if should_train_stop_here(linea_destino, sid_usado, hora_h, dow):
-        return None, []  # Está activo, el problema es otro
+    if should_train_stop_here(linea, sid_usado, hora_h, dow):
+        return None, []
 
     tipo_nombres = {
-        'night_service':  'servicio nocturno (solo de 00:00 a 06:00h)',
+        'night_service':  'servicio nocturno (solo de 22:00 a 06:00h)',
         'part_time':      'servicio parcial (solo de 06:00 a 23:00h)',
         'rush_hour_only': 'servicio solo en hora punta (L-V 06:30-09:30h y 15:30-20:00h)',
     }
-    motivo = (f"La parada <b>{destino_nombre}</b> en la Línea {linea_destino} tiene "
+    motivo = (f"La parada <b>{stop_nombre}</b> en la Línea {linea} tiene "
               f"{tipo_nombres.get(stype, stype)}, que no está activo a las "
               f"{hora_h:02d}h.")
 
-    # Buscar otras lineas que sirvan esa misma parada con servicio activo ahora
     alternativas = []
-    stops_mismo_nombre = p10.stops_df[p10.stops_df['stop_name'] == destino_nombre]
-    lineas_revisadas = {linea_destino}
+    stops_mismo_nombre = p10.stops_df[p10.stops_df['stop_name'] == stop_nombre]
+    lineas_revisadas = {linea}
 
     for _, row in stops_mismo_nombre.iterrows():
         base_alt = p10.limpiar_stop_id(row['stop_id'])
@@ -204,13 +209,16 @@ def diagnosticar_sin_ruta(destino_nombre, linea_destino, hora_h, dow):
             la = str(la_series.iloc[0])
             if la in lineas_revisadas or la not in p10.LINEAS_VALIDAS: continue
             lineas_revisadas.add(la)
-            # Verificar activo en esta linea a esta hora
             for v in [base_alt + 'N', base_alt + 'S', base_alt]:
                 if should_train_stop_here(la, v, hora_h, dow):
                     alternativas.append(la)
                     break
 
     return motivo, sorted(set(alternativas))
+
+
+def diagnosticar_sin_ruta(destino_nombre, linea_destino, hora_h, dow):
+    return diagnosticar_restriccion_parada(destino_nombre, linea_destino, hora_h, dow)
 
 
 # ============================================================================
@@ -310,12 +318,13 @@ def crear_mapa_ruta_especifica(opcion):
 # SESSION STATE
 # ============================================================================
 defaults = {
-    'opciones_ruta':      None,
-    'origen_nombre':      '',
-    'destino_nombre':     '',
+    'opciones_ruta':       None,
+    'origen_nombre':       '',
+    'destino_nombre':      '',
+    'linea_orig_busqueda': None,
     'linea_dest_busqueda': None,
-    'hora_h_busqueda':    12,
-    'dow_busqueda':       0,
+    'hora_h_busqueda':     12,
+    'dow_busqueda':        0,
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -388,9 +397,17 @@ if btn_buscar:
         else:
             lo = linea_orig_sel if linea_orig_sel != 'Todas' else None
             ld = linea_dest_sel if linea_dest_sel != 'Todas' else None
-            hora_h_calc = int(hora_str.split(':')[0])
+            try:
+                partes = hora_str.split(':')
+                hora_h_calc = int(partes[0])
+                if not (0 <= hora_h_calc <= 23) or len(partes) < 2 or not (0 <= int(partes[1]) <= 59):
+                    raise ValueError
+            except (ValueError, IndexError):
+                st.error("Formato de hora inválido. Usa HH:MM (ejemplo: 17:30).")
+                st.stop()
 
             # Guardar contexto para el diagnóstico posterior
+            st.session_state.linea_orig_busqueda = lo
             st.session_state.linea_dest_busqueda = ld
             st.session_state.hora_h_busqueda     = hora_h_calc
             st.session_state.dow_busqueda        = dow
@@ -415,27 +432,42 @@ if st.session_state.opciones_ruta is not None:
     opciones = st.session_state.opciones_ruta
 
     if len(opciones) == 0:
-        # Diagnóstico de por qué no hay ruta
-        motivo, alternativas = diagnosticar_sin_ruta(
+        hora_h_dx  = st.session_state.hora_h_busqueda
+        dow_dx     = st.session_state.dow_busqueda
+
+        motivo_orig, alt_orig = diagnosticar_restriccion_parada(
+            origen_input,
+            st.session_state.linea_orig_busqueda,
+            hora_h_dx, dow_dx
+        )
+        motivo_dest, alt_dest = diagnosticar_restriccion_parada(
             destino_input,
             st.session_state.linea_dest_busqueda,
-            st.session_state.hora_h_busqueda,
-            st.session_state.dow_busqueda
+            hora_h_dx, dow_dx
         )
-        if motivo:
-            st.markdown(
-                f"<div style='background:#fff3cd;border:1px solid #ffc107;border-radius:6px;"
-                f"padding:12px 16px;margin-bottom:8px;font-size:15px'> {motivo}</div>",
-                unsafe_allow_html=True)
-            if alternativas:
-                lineas_fmt = ", ".join([f"Línea {la}" for la in alternativas])
+
+        mostrado = False
+        for motivo, alternativas, stop_label, stop_nombre in [
+            (motivo_orig, alt_orig, "ORIGEN", origen_input),
+            (motivo_dest, alt_dest, "DESTINO", destino_input),
+        ]:
+            if motivo:
+                mostrado = True
                 st.markdown(
-                    f"<div style='background:#d1ecf1;border:1px solid #bee5eb;border-radius:6px;"
+                    f"<div style='background:#fff3cd;border:1px solid #ffc107;border-radius:6px;"
                     f"padding:12px 16px;margin-bottom:8px;font-size:15px'>"
-                    f" La parada <b>{destino_input}</b> también tiene servicio en: "
-                    f"{lineas_fmt}. Prueba seleccionando una de esas líneas.</div>",
+                    f"<b>[{stop_label}]</b> {motivo}</div>",
                     unsafe_allow_html=True)
-        else:
+                if alternativas:
+                    lineas_fmt = ", ".join([f"Línea {la}" for la in alternativas])
+                    st.markdown(
+                        f"<div style='background:#d1ecf1;border:1px solid #bee5eb;border-radius:6px;"
+                        f"padding:12px 16px;margin-bottom:8px;font-size:15px'>"
+                        f"La parada <b>{stop_nombre}</b> también tiene servicio en: "
+                        f"{lineas_fmt}. Prueba seleccionando una de esas líneas.</div>",
+                        unsafe_allow_html=True)
+
+        if not mostrado:
             st.warning("No se encontraron rutas válidas. Prueba con otra hora o estaciones.")
 
         if st.button(" Limpiar", key="btn_limpiar_vacio"):

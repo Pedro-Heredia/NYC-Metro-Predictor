@@ -2,8 +2,7 @@
 import os
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, mean_absolute_percentage_error
 import xgboost as xgb
 import pickle
@@ -27,12 +26,16 @@ print("\n Preparando features...")
 # Features disponibles ANTES del viaje (sin data leakage)
 available_features = [
     'hour', 'day_of_week', 'travel_time_minutes',
-    'is_morning_rush', 'is_lunch_rush', 'is_evening_rush',
+    'is_morning_rush', 'is_evening_rush',
     'minute_of_hour', 'minute_of_day',
     'position_ratio', 'is_early_segment', 'is_late_segment',
     'segment_number', 'total_segments',
     'is_line_3', 'is_line_5', 'is_express',
-    'hour_x_position', 'rush_x_segment','is_night'
+    'hour_x_position', 'rush_x_segment', 'is_night',
+    'origin_is_part_time', 'dest_is_part_time',
+    'origin_is_rush_hour', 'dest_is_rush_hour',
+    'delay_at_origin', 'cumulative_delay_origin',
+    'month', 'is_weekend', 'direction_north'
 ]
 
 # Codificar variables categoricas
@@ -44,28 +47,40 @@ for col in ['origin_stop_id', 'destination_stop_id', 'route_id']:
         encoders[col] = le
         available_features.append(f'{col}_encoded')
 
-X = viajes_df[available_features].values
-y = viajes_df['delay_at_destination'].values
-
 print(f"Features: {len(available_features)}")
-print(f"Samples: {len(X):,}")
+print(f"Samples: {len(viajes_df):,}")
 
-# split de datos
+# split temporal de datos
 
-print("\n Dividiendo datos...")
+print("\n Dividiendo datos (split temporal)...")
 
-# 80% Train, 20% Test
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
+# Ordenar por timestamp y usar 80% mas antiguo como train, 20% mas reciente como test.
+# Evita que el modelo vea el futuro durante el entrenamiento (data leakage temporal).
+viajes_df = viajes_df.sort_values('timestamp').reset_index(drop=True)
+cutoff = viajes_df['timestamp'].quantile(0.8)
+train_df = viajes_df[viajes_df['timestamp'] <= cutoff]
+test_df  = viajes_df[viajes_df['timestamp'] > cutoff]
 
-print(f"Train: {len(X_train):,} ({len(X_train)/len(X)*100:.1f}%)")
-print(f"Test:  {len(X_test):,} ({len(X_test)/len(X)*100:.1f}%)")
+X_train = train_df[available_features].values.astype(float)
+y_train = train_df['delay_at_destination'].values
+X_test  = test_df[available_features].values.astype(float)
+y_test  = test_df['delay_at_destination'].values
 
-# Escalar datos
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
+# Simular consultas pre-viaje: enmascarar delay_at_origin y cumulative_delay_origin
+# en el 40% del train. XGBoost aprende a funcionar en ambos modos:
+#   - con valores reales  -> modo tiempo real (tren ya en camino, delay conocido)
+#   - con NaN             -> modo pre-viaje   (consulta futura, delay desconocido)
+delay_origin_idx = available_features.index('delay_at_origin')
+cumul_origin_idx = available_features.index('cumulative_delay_origin')
+rng = np.random.default_rng(42)
+pretrain_mask = rng.random(len(X_train)) < 0.4
+X_train[pretrain_mask, delay_origin_idx] = np.nan
+X_train[pretrain_mask, cumul_origin_idx] = np.nan
+print(f"Muestras modo pre-viaje (NaN): {pretrain_mask.sum():,} ({pretrain_mask.mean()*100:.0f}%)")
+
+print(f"Cutoff: {cutoff}")
+print(f"Train: {len(X_train):,} ({len(X_train)/len(viajes_df)*100:.1f}%)")
+print(f"Test:  {len(X_test):,} ({len(X_test)/len(viajes_df)*100:.1f}%)")
 
 # entrenamiento
 
@@ -86,12 +101,12 @@ params = {
     'reg_alpha': 0.1,
     'reg_lambda': 1,
     'random_state': 42,
-    'n_jobs': -1  # Usa todos los cores
+    'n_jobs': -1
 }
 
 # Entrenar
 model = xgb.XGBRegressor(**params)
-model.fit(X_train_scaled, y_train, verbose=False)
+model.fit(X_train, y_train, verbose=False)
 
 train_time = time.time() - start_train
 
@@ -104,8 +119,8 @@ print("\n Evaluando modelo...")
 
 
 # Predicciones
-y_pred_train = model.predict(X_train_scaled)
-y_pred_test = model.predict(X_test_scaled)
+y_pred_train = model.predict(X_train)
+y_pred_test = model.predict(X_test)
 
 # Metricas Train
 mae_train  = mean_absolute_error(y_train, y_pred_train)
@@ -142,13 +157,30 @@ print(f"  +-30 seg:  {within_30s:>5.1f}%")
 print(f"  +-60 seg:  {within_60s:>5.1f}%")
 print(f"  +-120 seg: {within_120s:>5.1f}%")
 
+# Evaluacion por modo: tiempo real vs pre-viaje
+X_test_rt = X_test.copy()
+X_test_pt = X_test.copy()
+X_test_pt[:, delay_origin_idx] = np.nan
+X_test_pt[:, cumul_origin_idx] = np.nan
+
+y_pred_rt = model.predict(X_test_rt)
+y_pred_pt = model.predict(X_test_pt)
+
+mae_rt = mean_absolute_error(y_test, y_pred_rt)
+mae_pt = mean_absolute_error(y_test, y_pred_pt)
+r2_rt  = r2_score(y_test, y_pred_rt)
+r2_pt  = r2_score(y_test, y_pred_pt)
+
+print(f"\nEvaluacion por modo:")
+print(f"  Tiempo real (delay_at_origin conocido): MAE={mae_rt:.3f} min  R2={r2_rt:.4f} ({r2_rt*100:.1f}%)")
+print(f"  Pre-viaje   (delay_at_origin = NaN):    MAE={mae_pt:.3f} min  R2={r2_pt:.4f} ({r2_pt*100:.1f}%)")
+
 # guardar modelo
 
 
 # Empaquetar todo lo necesario
 model_package = {
     'model': model,
-    'scaler': scaler,
     'encoders': encoders,
     'features': available_features,
     'mae_test': mae_test,
@@ -194,4 +226,3 @@ print(f"\nArchivo generado:")
 print(f"   {filename} ({file_size:.2f} MB)")
 
 print(f"\nModelo listo para usar en la aplicacion!")
-

@@ -42,9 +42,10 @@ son públicos y no requieren clave de API. Requiere los archivos GTFS
 estáticos presentes en este directorio (stops.txt, stop_times.txt,
 trips.txt, calendar.txt, calendar_dates.txt).
 
-En el proyecto original el recolector estuvo funcionando aproximadamente
-8 semanas (desde finales de octubre de 2025 hasta finales de diciembre),
-acumulando unos 22.000 segmentos de viaje.
+En el proyecto original el recolector lleva funcionando de forma continua
+desde junio de 2026 en un servidor propio (Ubuntu, systemd), acumulando
+más de 16 millones de registros a fecha de esta actualización. El modelo
+se reentrena automáticamente cada semana sobre el histórico acumulado.
 
     python collector.py
 
