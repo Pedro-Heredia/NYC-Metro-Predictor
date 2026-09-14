@@ -91,7 +91,7 @@ def construir_datos_heatmap(lineas_activas=None):
     try:
         df = p10.viajes_df.copy()
         if 'destination_stop_id' not in df.columns: return None
-        if lineas_activas and 'route_id' in df.columns:
+        if lineas_activas is not None and 'route_id' in df.columns:
             df = df[df['route_id'].astype(str).isin(lineas_activas)]
             if df.empty: return None
         df['stop_base'] = df['destination_stop_id'].astype(str).apply(p10.limpiar_stop_id)
@@ -595,11 +595,28 @@ else:
     with col_ctrl:
         st.markdown("**Filtrar líneas:**")
         lineas_ordenadas = sorted(p10.LINEAS_VALIDAS)
-        seleccion = st.pills(
-            "Líneas a mostrar en el mapa", lineas_ordenadas, default=lineas_ordenadas,
-            selection_mode="multi", key="pills_lineas", label_visibility="collapsed"
-        )
-        lineas_activas = frozenset(seleccion) if seleccion else frozenset(p10.LINEAS_VALIDAS)
+
+        b_all, b_none = st.columns(2)
+        with b_all:
+            if st.button("Todas", use_container_width=True, key="btn_lineas_todas"):
+                st.session_state.pills_lineas = lineas_ordenadas
+        with b_none:
+            if st.button("Ninguna", use_container_width=True, key="btn_lineas_ninguna"):
+                st.session_state.pills_lineas = []
+
+        st.markdown("""
+        <style>
+        div.st-key-wrap_pills_lineas [data-testid="stPills"] > div{
+            flex-wrap:wrap !important; overflow-x:visible !important; height:auto !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        with st.container(key="wrap_pills_lineas"):
+            seleccion = st.pills(
+                "Líneas a mostrar en el mapa", lineas_ordenadas, default=lineas_ordenadas,
+                selection_mode="multi", key="pills_lineas", label_visibility="collapsed"
+            )
+        lineas_activas = frozenset(seleccion)
         st.markdown("---")
         mostrar_hm = st.checkbox("Retrasos actuales", value=False)
 
