@@ -1,4 +1,5 @@
 
+import gc
 import os
 import pandas as pd
 import numpy as np
@@ -37,15 +38,29 @@ available_features = [
     'delay_at_origin', 'cumulative_delay_origin',
     'month', 'is_weekend', 'direction_north'
 ]
+ENCODE_COLS = ['origin_stop_id', 'destination_stop_id', 'route_id']
 
-# Codificar variables categoricas
+# Codificar variables categoricas, y soltar YA las columnas que no hacen
+# falta (incluidas las de texto usadas para el encoding): el dataset tiene
+# 43 columnas y varias de texto (stop_id, stop_name, train_id...) pesan
+# muchisimo mas en RAM que en disco. Mantenerlas vivas mientras se hace el
+# sort_values de mas abajo (que de por si ya duplica memoria un instante)
+# es lo que hacia this script (con los hiperparametros mas pesados de la
+# busqueda de optuna) entrar en swap masivo y quedarse practicamente
+# colgado. Mutar el UNICO DataFrame cargado in-place (nunca una segunda
+# copia via seleccion de columnas) evita ese pico.
 encoders = {}
-for col in ['origin_stop_id', 'destination_stop_id', 'route_id']:
+for col in ENCODE_COLS:
     if col in viajes_df.columns:
         le = LabelEncoder()
         viajes_df[f'{col}_encoded'] = le.fit_transform(viajes_df[col])
         encoders[col] = le
         available_features.append(f'{col}_encoded')
+
+keep_cols = set(available_features) | {'delay_at_destination', 'timestamp'}
+drop_cols = [c for c in viajes_df.columns if c not in keep_cols]
+viajes_df.drop(columns=drop_cols, inplace=True)
+gc.collect()
 
 print(f"Features: {len(available_features)}")
 print(f"Samples: {len(viajes_df):,}")
@@ -56,15 +71,24 @@ print("\n Dividiendo datos (split temporal)...")
 
 # Ordenar por timestamp y usar 80% mas antiguo como train, 20% mas reciente como test.
 # Evita que el modelo vea el futuro durante el entrenamiento (data leakage temporal).
-viajes_df = viajes_df.sort_values('timestamp').reset_index(drop=True)
+# inplace=True: evita que pandas cree una copia entera solo para reordenar.
+viajes_df.sort_values('timestamp', inplace=True, ignore_index=True)
 cutoff = viajes_df['timestamp'].quantile(0.8)
-train_df = viajes_df[viajes_df['timestamp'] <= cutoff]
-test_df  = viajes_df[viajes_df['timestamp'] > cutoff]
+mask_train = (viajes_df['timestamp'] <= cutoff).values
 
-X_train = train_df[available_features].values.astype(float)
-y_train = train_df['delay_at_destination'].values
-X_test  = test_df[available_features].values.astype(float)
-y_test  = test_df['delay_at_destination'].values
+# .loc[mask, cols] en vez de guardar train_df/test_df como variables propias:
+# asi solo existe un DataFrame filtrado de forma transitoria dentro de cada
+# expresion (se libera en cuanto termina), en vez de mantener el DataFrame
+# original (9.4M filas) MAS dos copias filtradas (train y test) vivas a la
+# vez mientras se construyen los arrays de numpy.
+X_train = viajes_df.loc[mask_train, available_features].values.astype(float)
+y_train = viajes_df.loc[mask_train, 'delay_at_destination'].values
+X_test  = viajes_df.loc[~mask_train, available_features].values.astype(float)
+y_test  = viajes_df.loc[~mask_train, 'delay_at_destination'].values
+
+n_total = len(viajes_df)
+del viajes_df, mask_train
+gc.collect()
 
 # Simular consultas pre-viaje: enmascarar delay_at_origin y cumulative_delay_origin
 # en el 40% del train. XGBoost aprende a funcionar en ambos modos:
@@ -79,8 +103,8 @@ X_train[pretrain_mask, cumul_origin_idx] = np.nan
 print(f"Muestras modo pre-viaje (NaN): {pretrain_mask.sum():,} ({pretrain_mask.mean()*100:.0f}%)")
 
 print(f"Cutoff: {cutoff}")
-print(f"Train: {len(X_train):,} ({len(X_train)/len(viajes_df)*100:.1f}%)")
-print(f"Test:  {len(X_test):,} ({len(X_test)/len(viajes_df)*100:.1f}%)")
+print(f"Train: {len(X_train):,} ({len(X_train)/n_total*100:.1f}%)")
+print(f"Test:  {len(X_test):,} ({len(X_test)/n_total*100:.1f}%)")
 
 # entrenamiento
 
@@ -89,17 +113,20 @@ print("\nEntrenando XGBoost...")
 
 start_train = time.time()
 
-# Hiperparametros optimizados (del archivo 6)
+# Hiperparametros optimizados con optuna (100 trials, 14-sep-2026, sobre
+# ~9.4M segmentos). Mejora sobre los anteriores en el test held-out:
+# tiempo real MAE 0.874->0.700 min (R2 82.6%->90.4%),
+# pre-viaje   MAE 2.805->2.471 min (R2 12.2%->29.9%).
 params = {
-    'n_estimators': 200,
-    'max_depth': 8,
-    'learning_rate': 0.1,
-    'subsample': 0.8,
-    'colsample_bytree': 0.8,
-    'min_child_weight': 3,
-    'gamma': 0.1,
-    'reg_alpha': 0.1,
-    'reg_lambda': 1,
+    'n_estimators': 495,
+    'max_depth': 12,
+    'learning_rate': 0.17329806669873382,
+    'subsample': 0.8888135534549472,
+    'colsample_bytree': 0.6771771087923493,
+    'min_child_weight': 1,
+    'gamma': 0.1852947210203372,
+    'reg_alpha': 0.7448562961576143,
+    'reg_lambda': 1.7374173577378995,
     'random_state': 42,
     'n_jobs': -1
 }
