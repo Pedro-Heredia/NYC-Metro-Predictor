@@ -51,14 +51,27 @@ T = {
         'travel_time_word': 'Travel time', 'total_word': 'TOTAL',
         'min_early': 'min EARLY', 'min_late': 'min LATE', 'on_time': 'ON TIME',
         'map_title': 'Interactive Map of the Current Network', 'filter_lines': 'Filter lines:',
-        'btn_all': 'All', 'btn_none': 'None', 'current_delays': 'Current delays',
-        'current_time_label': 'Current time',
-        'heatmap_legend_title': 'Heatmap legend:',
+        'btn_all': 'All', 'btn_none': 'None', 'current_delays': 'Typical delays for this time',
+        'current_time_label': 'Reference time',
+        'heatmap_legend_title': 'Heatmap legend (historical average, not live data):',
         'heatmap_high': 'Red/Orange -> high delays (&gt;6 min avg)',
         'heatmap_med': 'Yellow/Green -> moderate delays (3-6 min)',
         'heatmap_low': 'Blue -> low delays (&lt;3 min)',
-        'about_model': 'ℹ️ About the model',
+        'about_model': 'ℹ️ About the model & data',
         'last_retrain': 'Last retraining', 'train_samples': 'Training samples',
+        'about_p1': "This app doesn't have a live connection to the MTA's real-time feed — it "
+                    'only bundles a trained model, a sample of historical data and the static '
+                    'GTFS schedule. That has two consequences worth knowing:',
+        'about_li1': '<b>"Typical delays" heatmap</b>: it is not live data. It shows the '
+                     '<b>historical average delay</b> recorded for each station at that hour '
+                     'and day of week — i.e. what delay to typically expect there, not what is '
+                     'happening on the network right now.',
+        'about_li2': '<b>Predictions are always "pre-trip"</b>: since there is no live delay '
+                     'to feed the model with, every search — whether "now" or weeks ahead — '
+                     'uses the pre-trip mode (unknown current delay). Searching for "now" and '
+                     'for a future date can therefore return the same prediction. The production '
+                     'pipeline (see the <code>codigo/</code> folder) does support a real-time '
+                     'mode fed by the live GTFS-RT feed; it is just not wired into this demo.',
         'days': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
         'svc_night_service': 'night service only (22:00 to 06:00)',
         'svc_part_time': 'part-time service only (06:00 to 23:00)',
@@ -89,14 +102,28 @@ T = {
         'travel_time_word': 'Tiempo de viaje', 'total_word': 'TOTAL',
         'min_early': 'min ANTES', 'min_late': 'min TARDE', 'on_time': 'A TIEMPO',
         'map_title': 'Mapa Interactivo de la Red Actual', 'filter_lines': 'Filtrar líneas:',
-        'btn_all': 'Todas', 'btn_none': 'Ninguna', 'current_delays': 'Retrasos actuales',
-        'current_time_label': 'Hora actual',
-        'heatmap_legend_title': 'Leyenda heatmap:',
+        'btn_all': 'Todas', 'btn_none': 'Ninguna', 'current_delays': 'Retrasos habituales a esta hora',
+        'current_time_label': 'Hora de referencia',
+        'heatmap_legend_title': 'Leyenda heatmap (media histórica, no en vivo):',
         'heatmap_high': 'Rojo/Naranja -> retrasos altos (&gt;6 min de media)',
         'heatmap_med': 'Amarillo/Verde -> retrasos moderados (3-6 min)',
         'heatmap_low': 'Azul -> retrasos bajos (&lt;3 min)',
-        'about_model': 'ℹ️ Sobre el modelo',
+        'about_model': 'ℹ️ Sobre el modelo y los datos',
         'last_retrain': 'Último reentrenamiento', 'train_samples': 'Muestras de entrenamiento',
+        'about_p1': 'Esta app no tiene conexión en vivo al feed en tiempo real de la MTA — solo '
+                    'incluye un modelo ya entrenado, una muestra de datos históricos y el GTFS '
+                    'estático. Eso tiene dos consecuencias que conviene saber:',
+        'about_li1': '<b>El mapa de "retrasos habituales"</b>: no son datos en vivo. Muestra la '
+                     '<b>media histórica de retraso</b> registrada en cada parada para esa hora '
+                     'y día de la semana — es decir, qué retraso es habitual esperar ahí, no lo '
+                     'que está pasando en la red ahora mismo.',
+        'about_li2': '<b>Las predicciones son siempre "pre-viaje"</b>: al no haber un retraso en '
+                     'vivo que darle al modelo, cualquier búsqueda — sea "ahora" o dentro de '
+                     'semanas — usa el modo pre-viaje (retraso actual desconocido). Por eso '
+                     'buscar "ahora" y una fecha futura puede devolver la misma predicción. El '
+                     'pipeline de producción (ver la carpeta <code>codigo/</code>) sí soporta un '
+                     'modo en tiempo real alimentado por el feed GTFS-RT en vivo; simplemente no '
+                     'está conectado a esta demo.',
         'days': ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'],
         'svc_night_service': 'servicio nocturno (solo de 22:00 a 06:00h)',
         'svc_part_time': 'servicio parcial (solo de 06:00 a 23:00h)',
@@ -127,14 +154,28 @@ T = {
         'travel_time_word': 'Fahrzeit', 'total_word': 'GESAMT',
         'min_early': 'Min früher', 'min_late': 'Min später', 'on_time': 'PÜNKTLICH',
         'map_title': 'Interaktive Karte des aktuellen Netzes', 'filter_lines': 'Linien filtern:',
-        'btn_all': 'Alle', 'btn_none': 'Keine', 'current_delays': 'Aktuelle Verspätungen',
-        'current_time_label': 'Aktuelle Zeit',
-        'heatmap_legend_title': 'Heatmap-Legende:',
+        'btn_all': 'Alle', 'btn_none': 'Keine', 'current_delays': 'Übliche Verspätungen zu dieser Zeit',
+        'current_time_label': 'Referenzzeit',
+        'heatmap_legend_title': 'Heatmap-Legende (historischer Durchschnitt, keine Live-Daten):',
         'heatmap_high': 'Rot/Orange -> hohe Verspätungen (&gt;6 Min. im Schnitt)',
         'heatmap_med': 'Gelb/Grün -> mittlere Verspätungen (3-6 Min.)',
         'heatmap_low': 'Blau -> geringe Verspätungen (&lt;3 Min.)',
-        'about_model': 'ℹ️ Über das Modell',
+        'about_model': 'ℹ️ Über Modell & Daten',
         'last_retrain': 'Letztes Training', 'train_samples': 'Trainingsdaten',
+        'about_p1': 'Diese App hat keine Live-Verbindung zum Echtzeit-Feed der MTA — sie enthält '
+                    'nur ein trainiertes Modell, eine Stichprobe historischer Daten und den '
+                    'statischen GTFS-Fahrplan. Das hat zwei Konsequenzen:',
+        'about_li1': '<b>Die "übliche Verspätung"-Heatmap</b>: keine Live-Daten. Sie zeigt die '
+                     '<b>historische durchschnittliche Verspätung</b>, die für diese Station zu '
+                     'dieser Stunde und diesem Wochentag erfasst wurde — also was dort üblich '
+                     'ist, nicht was im Netz gerade tatsächlich passiert.',
+        'about_li2': '<b>Vorhersagen sind immer "vor der Fahrt"</b>: da es keine Live-Verspätung '
+                     'gibt, die dem Modell übergeben werden könnte, nutzt jede Suche — "jetzt" '
+                     'oder Wochen im Voraus — den Vor-der-Fahrt-Modus (aktuelle Verspätung '
+                     'unbekannt). Deshalb können "jetzt" und ein zukünftiges Datum dieselbe '
+                     'Vorhersage liefern. Die Produktions-Pipeline (siehe Ordner '
+                     '<code>codigo/</code>) unterstützt durchaus einen Echtzeitmodus über den '
+                     'Live-GTFS-RT-Feed; er ist in dieser Demo nur nicht angebunden.',
         'days': ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'],
         'svc_night_service': 'nur Nachtbetrieb (22:00 bis 06:00 Uhr)',
         'svc_part_time': 'nur Teilzeitbetrieb (06:00 bis 23:00 Uhr)',
@@ -824,6 +865,13 @@ with st.expander(t('about_model')):
         detalles.append(f"**{t('train_samples')}:** {p10.n_samples_train:,}")
     if detalles:
         st.caption(" · ".join(detalles))
+    st.markdown("---")
+    st.markdown(t('about_p1'))
+    st.markdown(
+        f"<ul style='margin-top:4px'><li>{t('about_li1')}</li>"
+        f"<li style='margin-top:6px'>{t('about_li2')}</li></ul>",
+        unsafe_allow_html=True
+    )
 
 #https://python-visualization.github.io/folium/latest/user_guide/map.html
 #https://folium.streamlit.app/
