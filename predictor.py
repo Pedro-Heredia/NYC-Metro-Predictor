@@ -61,11 +61,27 @@ DIAS = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'
 try:
     stop_times_df = pd.read_csv(GTFS_DIR / "stop_times.txt")
     trips_df = pd.read_csv(GTFS_DIR / "trips.txt")
-    stops_df = pd.read_csv(GTFS_DIR / "stops.txt")  
+    stops_df = pd.read_csv(GTFS_DIR / "stops.txt")
     print("GTFS cargado correctamente")
 except Exception as e:
     print(f"Error cargando archivos GTFS: {e}")
     exit(1)
+
+# transfers.txt oficial de la MTA: transbordos reales entre complejos de
+# estaciones que la MTA considera conectados (a veces con nombres distintos
+# por linea, o a mas de 400m), que el heuristico de nombre+distancia de
+# construir_un_grafo no puede detectar por si solo.
+try:
+    transfers_df = pd.read_csv(GTFS_DIR / "transfers.txt")
+    TRANSBORDOS_REALES = [
+        (str(row['from_stop_id']), str(row['to_stop_id']))
+        for _, row in transfers_df.iterrows()
+        if str(row['from_stop_id']) != str(row['to_stop_id'])
+    ]
+    print(f"transfers.txt cargado: {len(TRANSBORDOS_REALES)} transbordos entre paradas distintas")
+except FileNotFoundError:
+    TRANSBORDOS_REALES = []
+    print("Aviso: no se encontro transfers.txt, solo se usara el heuristico de nombre+distancia")
 
 def parsear_fecha(fecha_str):
     try:
@@ -203,37 +219,41 @@ def construir_un_grafo(grafo, trips_excluidos, trips_requeridos=None):
         if not candidatos:
             candidatos = todos #si los filtros vacian la lista, usar todos
 
-        # Elegir el trip representativo (el mas frecuente en numero de paradas)
-        trips_muestra = pd.Series(candidatos).head(200) 
-        stop_counts = stop_times_df[
-            stop_times_df['trip_id'].isin(trips_muestra)
-        ].groupby('trip_id').size() # lo normal es que en la linea X haya Y numero de paradas, para ignorar trenes raros (averias y tal)
+        # Antes se elegia UN solo viaje "representativo" (el de longitud mas
+        # comun) para toda la linea+sentido. Eso descartaba del grafo
+        # cualquier parada que solo existiera en una rama distinta de la
+        # misma linea (p.ej. la A se divide en Far Rockaway vs Ozone
+        # Park-Lefferts Blvd: una parada de la rama no elegida no aparecia
+        # NUNCA en el grafo, dando "no hay ruta" aunque si existiera).
+        #
+        # En vez de eso, agrupamos los viajes por su secuencia de paradas
+        # exacta (cada rama real tiene siempre la misma secuencia) y
+        # procesamos TODAS las ramas con suficiente soporte (asi seguimos
+        # ignorando viajes raros/averias, que son secuencias que casi no se
+        # repiten, pero no perdemos ramas legitimas que circulan a diario).
+        secuencias = stop_times_df[
+            stop_times_df['trip_id'].isin(candidatos)
+        ].sort_values(['trip_id', 'stop_sequence']).groupby('trip_id')['stop_id'].apply(
+            lambda s: tuple(limpiar_stop_id(x) for x in s)
+        )
 
-        if stop_counts.empty:
+        if secuencias.empty:
             continue
 
-        mode_length = stop_counts.mode()[0] #para saber cuantas paradas tiene el trayecto "comun"
-        best_trip = stop_counts[stop_counts == mode_length].index[0] #elegimos el primer viaje que coincida con la longitud 
+        conteo_secuencias = secuencias.value_counts() # cuantos viajes siguen cada secuencia exacta
+        min_soporte = max(2, int(0.02 * len(secuencias))) # ignorar secuencias que aparecen 1 vez suelta (averia/desvio puntual)
+        ramas_validas = conteo_secuencias[conteo_secuencias >= min_soporte].index.tolist()
 
-        # DEBUG para lo de la parte de la linea de rush hour que va por otro lado (SOLUCIONADO, ERA QUE HABIA PARADAS "DUPLICADAS" POR MISMA AVENIDA EN EL ARCHIVO DE TIPOS DE PARADAS)
-        if r_id == '5':
-            #print(f"DEBUG  Trip representativo linea 5: {best_trip}, paradas: {mode_length}")
-            stops_seq_debug = stop_times_df[
-                stop_times_df['trip_id'] == best_trip
-            ].sort_values('stop_sequence')
-            #print(stops_seq_debug['stop_id'].tolist())
+        if not ramas_validas: # fallback de seguridad: si el filtro deja la lista vacia, usar la secuencia mas comun igualmente
+            ramas_validas = [conteo_secuencias.index[0]]
 
-
-        #sacar la secuencia de paradas del viaje "comun"
-        stops_seq = stop_times_df[stop_times_df['trip_id'] == best_trip].sort_values('stop_sequence')
-        lista_paradas = stops_seq['stop_id'].apply(limpiar_stop_id).tolist()
-
-        for i in range(len(lista_paradas) - 1): # Creamos las aristas del viaje
-            orig = (lista_paradas[i],   r_id)
-            dest = (lista_paradas[i+1], r_id)
-            grafo.add_edge(orig, dest, weight=1.5, type='viaje') 
-            grafo.add_edge(dest, orig, weight=1.5, type='viaje') #permitir ambos sentidos
-            count_viajes += 2 #uno ida otro vuelta
+        for lista_paradas in ramas_validas:
+            for i in range(len(lista_paradas) - 1): # Creamos las aristas del viaje
+                orig = (lista_paradas[i],   r_id)
+                dest = (lista_paradas[i+1], r_id)
+                grafo.add_edge(orig, dest, weight=1.5, type='viaje')
+                grafo.add_edge(dest, orig, weight=1.5, type='viaje') #permitir ambos sentidos
+                count_viajes += 2 #uno ida otro vuelta
 
     # logica para los transbordos
     def haversine(lon1, lat1, lon2, lat2): #para solucionar el  problema de que en una misma calle hay 24 paradas con el mismo nombre (cambio de linea 2 a 6 en la 96 St)
@@ -274,6 +294,24 @@ def construir_un_grafo(grafo, trips_excluidos, trips_requeridos=None):
                                 
                         grafo.add_edge(d1['nodo'], d2['nodo'], weight=100.0, type='transbordo')
                         count_transbordos += 1
+
+    # Transbordos reales de transfers.txt: cubren complejos de estaciones
+    # conectados por la MTA que el heuristico anterior (mismo nombre y
+    # <400m) no detecta, porque tienen nombres distintos por linea o estan
+    # algo mas lejos (pasillos/andenes largos). Agrupamos los nodos del
+    # grafo por su stop_id (sin limpiar de nuevo, ya viene limpio) para
+    # conectar TODAS las lineas de una parada con TODAS las de la otra.
+    nodos_por_stop = {}
+    for n in grafo.nodes():
+        stop_id, _ = n
+        nodos_por_stop.setdefault(stop_id, []).append(n)
+
+    for from_id, to_id in TRANSBORDOS_REALES:
+        for n1 in nodos_por_stop.get(from_id, []):
+            for n2 in nodos_por_stop.get(to_id, []):
+                if n1 != n2 and not grafo.has_edge(n1, n2):
+                    grafo.add_edge(n1, n2, weight=100.0, type='transbordo')
+                    count_transbordos += 1
 
     return count_viajes, count_transbordos
 
