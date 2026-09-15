@@ -72,6 +72,7 @@ T = {
                      'for a future date can therefore return the same prediction. The production '
                      'pipeline (see the <code>codigo/</code> folder) does support a real-time '
                      'mode fed by the live GTFS-RT feed; it is just not wired into this demo.',
+        'view_source': 'View source code on GitHub',
         'days': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
         'svc_night_service': 'night service only (22:00 to 06:00)',
         'svc_part_time': 'part-time service only (06:00 to 23:00)',
@@ -124,6 +125,7 @@ T = {
                      'pipeline de producción (ver la carpeta <code>codigo/</code>) sí soporta un '
                      'modo en tiempo real alimentado por el feed GTFS-RT en vivo; simplemente no '
                      'está conectado a esta demo.',
+        'view_source': 'Ver código fuente en GitHub',
         'days': ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'],
         'svc_night_service': 'servicio nocturno (solo de 22:00 a 06:00h)',
         'svc_part_time': 'servicio parcial (solo de 06:00 a 23:00h)',
@@ -176,6 +178,7 @@ T = {
                      'Vorhersage liefern. Die Produktions-Pipeline (siehe Ordner '
                      '<code>codigo/</code>) unterstützt durchaus einen Echtzeitmodus über den '
                      'Live-GTFS-RT-Feed; er ist in dieser Demo nur nicht angebunden.',
+        'view_source': 'Quellcode auf GitHub ansehen',
         'days': ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'],
         'svc_night_service': 'nur Nachtbetrieb (22:00 bis 06:00 Uhr)',
         'svc_part_time': 'nur Teilzeitbetrieb (06:00 bis 23:00 Uhr)',
@@ -872,6 +875,8 @@ with st.expander(t('about_model')):
         f"<li style='margin-top:6px'>{t('about_li2')}</li></ul>",
         unsafe_allow_html=True
     )
+
+st.caption(f"🔗 [{t('view_source')}](https://github.com/Pedro-Heredia/NYC-Metro-Predictor)")
 
 #https://python-visualization.github.io/folium/latest/user_guide/map.html
 #https://folium.streamlit.app/
