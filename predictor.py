@@ -472,6 +472,14 @@ def predecir_ruta_completa(ruta_stops, hora_salida_min, dow, grafo=None, delay_a
             delay_en_origen = delay
             cumul_delay = (cumul_delay or 0) + delay_real
 
+    if len(ruta_stops) < 2:
+        # Tramo sin trayecto real (aterrizaje de un transbordo entre 2
+        # paradas homonimas, p.ej.): el bucle de arriba no llega a
+        # ejecutarse ni una vez, asi que sin este suelo se mostraria un
+        # "Travel time: 0.0 min" confuso. Minimo de 30 segundos.
+        prog_total = 0.5
+        hora_actual += prog_total
+
     return {
         'hora_llegada_min': hora_actual,
         'delay_total': delay_total,

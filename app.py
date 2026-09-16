@@ -46,7 +46,7 @@ T = {
         'departure_word': 'DEPARTURE', 'arrival_word': 'ARRIVAL', 'target_word': 'Target',
         'route_word': 'Route', 'breakdown_word': 'SEGMENT BREAKDOWN',
         'transfer_word': 'TRANSFER at', 'change_to': 'Switch to L',
-        'segment_word': 'Segment', 'sched_word': 'sched', 'est_word': 'est',
+        'segment_word': 'Segment', 'sched_word': 'scheduled', 'est_word': 'est',
         'departure_short': 'Departure', 'arrival_short': 'Arrival',
         'travel_time_word': 'Travel time', 'total_word': 'TOTAL',
         'min_early': 'min EARLY', 'min_late': 'min LATE', 'on_time': 'ON TIME',
