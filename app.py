@@ -38,7 +38,9 @@ T = {
         'err_invalid_time': 'Invalid time format. Use HH:MM (e.g. 17:30).',
         'spinner_searching': 'Searching for optimal routes...',
         'origin_tag': 'ORIGIN', 'destination_tag': 'DESTINATION',
-        'warn_no_routes': 'No valid routes found. Try another time or stations.',
+        'no_connection_msg': "No route was found between **{origin}** and **{destination}** — "
+                              "they don't seem to be connected by any combination of the subway "
+                              "lines this app covers.",
         'btn_clear': 'Clear', 'btn_clear_search': 'Clear search',
         'itineraries_found': 'Itineraries Found', 'visualization': 'Visualization',
         'option_word': 'OPTION', 'line_word': 'line',
@@ -90,7 +92,9 @@ T = {
         'err_invalid_time': 'Formato de hora inválido. Usa HH:MM (ejemplo: 17:30).',
         'spinner_searching': 'Buscando rutas óptimas...',
         'origin_tag': 'ORIGEN', 'destination_tag': 'DESTINO',
-        'warn_no_routes': 'No se encontraron rutas válidas. Prueba con otra hora o estaciones.',
+        'no_connection_msg': "No se encontró ninguna ruta entre **{origin}** y **{destination}** "
+                              "— no parecen estar conectadas por ninguna combinación de las "
+                              "líneas de metro que cubre esta app.",
         'btn_clear': 'Limpiar', 'btn_clear_search': 'Limpiar búsqueda',
         'itineraries_found': 'Itinerarios Encontrados', 'visualization': 'Visualización',
         'option_word': 'OPCION', 'line_word': 'línea',
@@ -143,7 +147,9 @@ T = {
         'err_invalid_time': 'Ungültiges Zeitformat. Verwende HH:MM (z. B. 17:30).',
         'spinner_searching': 'Suche nach optimalen Routen...',
         'origin_tag': 'START', 'destination_tag': 'ZIEL',
-        'warn_no_routes': 'Keine gültigen Routen gefunden. Versuche eine andere Zeit oder Stationen.',
+        'no_connection_msg': "Es wurde keine Route zwischen **{origin}** und **{destination}** "
+                              "gefunden — sie scheinen durch keine Kombination der von dieser "
+                              "App abgedeckten U-Bahn-Linien verbunden zu sein.",
         'btn_clear': 'Zurücksetzen', 'btn_clear_search': 'Suche zurücksetzen',
         'itineraries_found': 'Gefundene Routen', 'visualization': 'Visualisierung',
         'option_word': 'OPTION', 'line_word': 'Linie',
@@ -697,7 +703,7 @@ if st.session_state.opciones_ruta is not None:
                         unsafe_allow_html=True)
 
         if not mostrado:
-            st.warning(t('warn_no_routes'))
+            st.warning(t('no_connection_msg', origin=origen_input, destination=destino_input))
 
         if st.button(f" {t('btn_clear')}", key="btn_limpiar_vacio"):
             st.session_state.opciones_ruta = None; st.rerun()
