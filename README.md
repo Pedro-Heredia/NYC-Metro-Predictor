@@ -10,7 +10,7 @@ Aplicación web para predecir retrasos en el metro de Nueva York y calcular ruta
 
 Desarrollada como Trabajo de Fin de Grado en Ingeniería Informática.
 
-**Demo en vivo:** https://nyc-metro-precitor.streamlit.app/
+**Demo en vivo:** https://nyc-metro-predictor.streamlit.app/
 
 ### Cómo funciona
 
@@ -67,7 +67,7 @@ Web app that predicts NYC subway delays and calculates optimal routes between st
 
 Built as a final degree project (Computer Engineering).
 
-**Live demo:** https://nyc-metro-precitor.streamlit.app/
+**Live demo:** https://nyc-metro-predictor.streamlit.app/
 
 ### How it works
 
